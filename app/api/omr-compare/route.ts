@@ -3,6 +3,15 @@ import { spawn } from "child_process";
 import { writeFile, unlink } from "fs/promises";
 import path from "path";
 import os from "os";
+import { v4 as uuidv4 } from "uuid";
+
+interface OMRResult {
+  correct: number;
+  wrong: number;
+  unanswered: number;
+  total: number;
+  score: number;
+}
 
 async function saveBlobToFile(blob: Blob, filename: string): Promise<string> {
   const buffer = Buffer.from(await blob.arrayBuffer());
@@ -11,44 +20,111 @@ async function saveBlobToFile(blob: Blob, filename: string): Promise<string> {
   return filePath;
 }
 
+async function processOMR(answerKeyPath: string, studentSheetPath: string): Promise<OMRResult> {
+  return new Promise((resolve, reject) => {
+    const python = spawn(
+      "E:\\Nextjs\\omr-sheet-scanner\\.venv\\Scripts\\python.exe",
+      ["omr_process.py", answerKeyPath, studentSheetPath]
+    );
+
+    let output = "";
+    let errorOutput = "";
+
+    python.stdout.on("data", (data) => {
+      output += data;
+    });
+
+    python.stderr.on("data", (data) => {
+      errorOutput += data;
+    });
+
+    python.on("close", (code) => {
+      if (code !== 0) {
+        reject(new Error(errorOutput || "Python OMR processing failed"));
+        return;
+      }
+
+      try {
+        const result = JSON.parse(output) as OMRResult;
+        resolve(result);
+      } catch (e) {
+        reject(new Error("Invalid Python output format"));
+      }
+    });
+
+    python.on("error", (err) => {
+      reject(new Error(`Failed to start Python process: ${err.message}`));
+    });
+  });
+}
+
 export async function POST(req: NextRequest) {
-  const formData = await req.formData();
-  const answerKey = formData.get("answerKey");
-  const studentSheets = formData.getAll("studentSheets");
-
-  if (!(answerKey instanceof Blob) || !(studentSheets[0] instanceof Blob)) {
-    return NextResponse.json({ error: "Missing files" }, { status: 400 });
-  }
-
-  // Save files to temp
-  const answerKeyPath = await saveBlobToFile(answerKey, `answer_key_${Date.now()}`);
-  const studentSheetPath = await saveBlobToFile(studentSheets[0] as Blob, `student_sheet_${Date.now()}`);
-
-  // Call Python script
-  const python = spawn("E:\\Nextjs\\omr-sheet-scanner\\.venv\\Scripts\\python.exe", ["omr_process.py", answerKeyPath, studentSheetPath]);
-  // const python = spawn("python", ["omr_process.py", answerKeyPath, studentSheetPath]);
-  let output = "";
-  for await (const chunk of python.stdout) {
-    output += chunk;
-  }
-  let errorOutput = "";
-  for await (const chunk of python.stderr) {
-    errorOutput += chunk;
-  }
-  const exitCode = await new Promise((resolve) => python.on("close", resolve));
-
-  // Clean up temp files
-  await unlink(answerKeyPath);
-  await unlink(studentSheetPath);
-
-  if (exitCode !== 0) {
-    return NextResponse.json({ error: errorOutput || "Python OMR failed" }, { status: 500 });
-  }
-
   try {
-    const result = JSON.parse(output);
-    return NextResponse.json(result);
-  } catch (e) {
-    return NextResponse.json({ error: "Invalid Python output" }, { status: 500 });
+    const formData = await req.formData();
+    const answerKey = formData.get("answerKey");
+    const studentSheets = formData.getAll("studentSheets");
+
+    // Validate input
+    if (!(answerKey instanceof Blob) || !studentSheets.length) {
+      return NextResponse.json(
+        { error: "Missing required files" },
+        { status: 400 }
+      );
+    }
+
+    // Validate file types
+    if (!answerKey.type.startsWith("image/")) {
+      return NextResponse.json(
+        { error: "Answer key must be an image file" },
+        { status: 400 }
+      );
+    }
+
+    // Generate unique filenames
+    const answerKeyPath = await saveBlobToFile(
+      answerKey,
+      `answer_key_${uuidv4()}.${answerKey.type.split("/")[1]}`
+    );
+
+    // Process each student sheet
+    const results = await Promise.all(
+      studentSheets.map(async (sheet) => {
+        if (!(sheet instanceof Blob)) {
+          throw new Error("Invalid student sheet file");
+        }
+
+        if (!sheet.type.startsWith("image/")) {
+          throw new Error("Student sheet must be an image file");
+        }
+
+        const studentSheetPath = await saveBlobToFile(
+          sheet,
+          `student_sheet_${uuidv4()}.${sheet.type.split("/")[1]}`
+        );
+
+        try {
+          const result = await processOMR(answerKeyPath, studentSheetPath);
+          await unlink(studentSheetPath);
+          return result;
+        } catch (error) {
+          await unlink(studentSheetPath);
+          throw error;
+        }
+      })
+    );
+
+    // Clean up answer key
+    await unlink(answerKeyPath);
+
+    return NextResponse.json({
+      success: true,
+      results: results.length === 1 ? results[0] : results,
+    });
+  } catch (error) {
+    console.error("OMR processing error:", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "An unexpected error occurred" },
+      { status: 500 }
+    );
   }
 }

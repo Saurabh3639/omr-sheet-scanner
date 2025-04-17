@@ -1,36 +1,104 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# OMR Sheet Scanner
 
-## Getting Started
+A modern web application for Optical Mark Recognition (OMR) that automatically scans and grades multiple-choice answer sheets. Built with Next.js and Python.
 
-First, run the development server:
+## Features
 
+- 🖼️ Upload and process multiple answer sheets simultaneously
+- 📊 Automatic bubble detection and answer extraction
+- ⚡ Fast processing with GPU acceleration support
+- 📱 Responsive web interface
+- 🔒 Secure file handling and processing
+- 📈 Detailed scoring and analytics
+
+## Tech Stack
+
+- **Frontend**: Next.js 13+, TypeScript, Tailwind CSS
+- **Backend**: Python, OpenCV
+- **Image Processing**: OpenCV with GPU acceleration
+- **API**: Next.js API Routes
+
+## Prerequisites
+
+- Node.js 18+ and npm
+- Python 3.8+
+- OpenCV with CUDA support (optional, for GPU acceleration)
+
+## Installation
+
+1. Clone the repository:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/yourusername/omr-sheet-scanner.git
+cd omr-sheet-scanner
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Install Python dependencies:
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. Install Node.js dependencies:
+```bash
+npm install
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+4. Create a `.env` file in the root directory:
+```env
+# Add any environment variables here
+```
 
-## Learn More
+## Usage
 
-To learn more about Next.js, take a look at the following resources:
+1. Start the development server:
+```bash
+npm run dev
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+2. Open your browser and navigate to `http://localhost:3000`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+3. Upload your answer key and student answer sheets
 
-## Deploy on Vercel
+4. View the processed results and scores
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## API Endpoints
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `POST /api/omr-compare`: Process and compare answer sheets
+  - Accepts multipart form data with `answerKey` and `studentSheets` fields
+  - Returns JSON with scoring results
+
+## Configuration
+
+The OMR processing can be configured through the `OMRConfig` class in `omr_process.py`:
+
+```python
+@dataclass
+class OMRConfig:
+    min_bubble_size: int = 20
+    max_bubble_size: int = 60
+    min_aspect_ratio: float = 0.7
+    max_aspect_ratio: float = 1.3
+    min_bubble_area: int = 200
+    row_threshold: int = 20
+    fill_threshold: int = 200
+    use_gpu: bool = True
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- OpenCV for image processing capabilities
+- Next.js team for the amazing framework
+- All contributors and users of this project
